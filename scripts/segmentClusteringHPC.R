@@ -29,52 +29,56 @@ print(paste("PARAMETERS:", "output_dir=", output_dir, "mclust_model=", mclust_mo
 # Load source libraries
 # TODO: Organize dependencies
 #
-setwd("~/code/cnprep_clustering/scripts")
-source("helperFunctions.R")
-source("segmentClusteringLibrary2.R")
-
-# TODO: Do not include segments with lower than 5K bp (see paper)
-
-reference <- "hN31"
-sample_dir <- "./resources/FACETS_Reference_hN31_7_28_18_2/"
+setwd("~/code/cnvkit_cnprep_clustering/scripts")
+source("./scripts/helperFunctions.R")
+source("./scripts/segmentClusteringLibrary.R")
+source("./scripts/cnvkitAdapterFunctions.R")
 
 #
 # Load input
 #
-cd_cnprep()
 normal_samples <- load_samples(classes = c("N"), sampleList = "./resources/sampleList.csv")
-normal_samples <- normal_samples[normal_samples != reference] # Remove reference organoid
 
 cytobands <- retrieveCytobands(dir = "./resources/cytoBand.txt")
-chromosomeSizes <- readRDS("./resources/chromosomeSizes.rds")
-normalSegments <- selectSegmentsWithEvents(events = c("A", "D", "N"), samples = normal_samples, chromosomeSizes = chromosomeSizes, 
-                                           dir = sample_dir, sample_subdir="/", reference=reference, extension = "cnv.facets.v0.5.2.txt", inSampleFolder = TRUE, 
-                                           rescaleInput = TRUE, ampCall = 0.2, delCall = -0.235)
-target_samples <- load_samples(classes = c("N", "T", "F", "M"), sampleList = "./resources/sampleList.csv")
-target_samples <- target_samples[target_samples != reference] # Remove reference organoid
+chromosomeSizes <- generateChromosomeSizes(genome = BSgenome.Hsapiens.UCSC.hg19)
+
+normalSegments <- do.call(rbind, lapply(normal_samples, function(sample){
+  return(retrieveCNVkitSegments(sample, dir="./resources/testCNVkitNorm/", genes = FALSE))
+}))
+
+normalSegments <- cnvKitSegmentsToBedFormat(normalSegments)
+
+target_samples <- load_samples(classes = c("T", "F", "M"), sampleList = "./resources/sampleList.csv")
 
 # Generate norminput argument
 norminput <- retrieveNormInput(normalSegments)
-norminput <- filterNormInput(norminput, length_threshold=10000000)
+norminput <- filterNormInput(norminput, length_threshold=1.1e7)
 
 # Create folder with output
 dir.create(file.path("./output/", output_dir))
 
-for(target_samples.i in 1:length(target_samples)) {
-  sample <- target_samples[target_samples.i]
+
+for(target_samples in seq(1, length(target_samples))){
+  sample <- target_samples[target_samples]
   
   print(paste("Analyzing sample", sample))
   
-  facets_segment_data <- retrieveFacetsSegments(sample, sample_subdir = "/", reference = reference, dir = sample_dir)
-  facets_snp_data <- retrieveFacetsSnps(sample, sample_subdir = "/", reference = reference, dir = sample_dir)
+  #
+  # Retrieve sample data
+  #
+  setwd("~/Git-Projects/Git-Research-Projects/CNVKit-Workflow-Adapter")
+  cnvkit_segment_data <- retrieveCNVkitSegments(sample, dir="./resources/testCNVkit/", genes = FALSE)
+  cnvkit_bins_data <- retrieveCNVkitBins(sample, dir="./resources/testCNVkit/")
+  
+  segment_probes_assignment <- assignProbeNumbers(cnvkit_segment_data, cnvkit_bins_data)
   
   # Generate seginput argument
-  seginput <- retrieveSegInput(facets_segment_data, sample, chromosomeSizes, cytobands)
+  seginput <- retrieveSegInput(cnvkit_segment_data = cnvkit_segment_data, segment_probes_assignment = segment_probes_assignment, sample=sample, chromosomeSizes = chromosomeSizes, cytobands = cytobands)
   print(paste("Retrieved segment input for sample", sample))
   
   # Generate ratinput argument
-  ratinput <- retrieveRatInput(facets_snp_data, sample)
-  print(paste("Retrieved ratio input for sample", sample))
+  ratinput <- retrieveRatInput(cnvkit_bins_data, sample)
+  print(paste("Retrieved ratio input for sample", sample))  
   
   # Run CNprep:CNpreprocessing
   try({
