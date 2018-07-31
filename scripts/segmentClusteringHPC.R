@@ -40,7 +40,7 @@ source("./scripts/cnvkitAdapterFunctions.R")
 normal_samples <- load_samples(classes = c("N"), sampleList = "./resources/sampleList.csv")
 
 cytobands <- retrieveCytobands(dir = "./resources/cytoBand.txt")
-chromosomeSizes <- generateChromosomeSizes(genome = BSgenome.Hsapiens.UCSC.hg19)
+chromosomeSizes <- readRDS("./resources/chromosomeSizes.rds")
 
 normalSegments <- do.call(rbind, lapply(normal_samples, function(sample){
   return(retrieveCNVkitSegments(sample, dir="./resources/testCNVkitNorm/", genes = FALSE))
@@ -55,18 +55,17 @@ norminput <- retrieveNormInput(normalSegments)
 norminput <- filterNormInput(norminput, length_threshold=1.1e7)
 
 # Create folder with output
-dir.create(file.path("./output/", output_dir))
+dir.create(file.path("./output/", output_dir), showWarnings = FALSE)
 
 
-for(target_samples in seq(1, length(target_samples))){
-  sample <- target_samples[target_samples]
+for(target_samples.i in seq(1, length(target_samples))){
+  sample <- target_samples[target_samples.i]
   
   print(paste("Analyzing sample", sample))
   
   #
   # Retrieve sample data
   #
-  setwd("~/Git-Projects/Git-Research-Projects/CNVKit-Workflow-Adapter")
   cnvkit_segment_data <- retrieveCNVkitSegments(sample, dir="./resources/testCNVkit/", genes = FALSE)
   cnvkit_bins_data <- retrieveCNVkitBins(sample, dir="./resources/testCNVkit/")
   
